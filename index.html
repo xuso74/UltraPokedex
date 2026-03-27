@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ultra Pokedex | Mobile Optimized</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <style>
+        body {
+            background: linear-gradient(-45deg, #1e3a8a, #3b82f6, #9333ea, #2563eb);
+            background-size: 400% 400%;
+            animation: gradient-bg 15s ease infinite;
+            min-height: 100vh;
+            margin: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
+        @keyframes gradient-bg {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.12);
+            backdrop-filter: blur(15px);
+            -webkit-backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 2rem;
+        }
+        .pokemon-card {
+            background: rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 1.5rem;
+            transition: transform 0.3s ease;
+        }
+        /* Ajuste para que no se rompa el diseño en móviles muy pequeños */
+        @media (max-width: 380px) {
+            .grid-cols-2 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+        }
+        [v-cloak] { display: none; }
+    </style>
+</head>
+<body class="text-white antialiased">
+
+<div id="app" v-cloak class="max-w-6xl mx-auto px-4 py-6 md:py-10">
+    
+    <header class="text-center mb-10 p-6 glass-panel">
+        <h1 class="text-4xl md:text-6xl font-black tracking-tighter mb-2">
+            <span class="text-yellow-300">ULTRA</span> POKEDEX
+        </h1>
+        <p class="text-white/60 font-bold uppercase tracking-widest text-[10px] md:text-xs">
+            Database v3.5 • Responsive Glass Interface
+        </p>
+    </header>
+
+    <div class="sticky top-4 z-40 max-w-xl mx-auto mb-16">
+        <input v-model="search" type="text" placeholder="Buscar Pokémon..." 
+               class="w-full p-5 rounded-2xl glass-panel bg-white/10 placeholder-white/40 text-white outline-none text-lg border-2 border-white/20 focus:border-yellow-300 transition-all shadow-2xl">
+    </div>
+
+    <div v-if="!loading" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 md:gap-8">
+        <div v-for="poke in filteredPokemon" :key="poke.id" 
+             @click="selectPokemon(poke)"
+             class="pokemon-card p-4 md:p-6 text-center group active:scale-95">
+            <img :src="poke.image" class="w-24 h-24 md:w-32 md:h-32 mx-auto -mt-12 md:-mt-16 mb-2 drop-shadow-2xl group-hover:scale-110 transition-transform">
+            <h2 class="font-bold capitalize text-sm md:text-xl truncate">{{ poke.name }}</h2>
+            <div class="text-[9px] font-black text-yellow-300/80 mt-1 uppercase">ID: #{{ poke.id }}</div>
+        </div>
+    </div>
+
+    <div v-if="selectedPoke" class="fixed inset-0 bg-black/70 backdrop-blur-md z-50 flex items-end md:items-center justify-center p-0 md:p-4" @click.self="selectedPoke = null">
+        <div class="glass-panel w-full max-w-lg p-8 md:p-10 rounded-t-[3rem] md:rounded-[3rem] animate__animated animate__slideInUp md:animate__zoomIn">
+            
+            <button @click="selectedPoke = null" class="absolute top-6 right-8 text-white/50 text-2xl">✕</button>
+            
+            <div class="text-center">
+                <img :src="selectedPoke.image" class="w-48 h-48 mx-auto -mt-24 md:-mt-32 drop-shadow-2xl mb-4">
+                <h2 class="text-4xl font-black capitalize mb-2">{{ selectedPoke.name }}</h2>
+                
+                <div class="flex justify-center gap-2 mb-8">
+                    <span v-for="t in selectedPoke.types" :key="t" 
+                          class="px-4 py-1 rounded-full text-[10px] font-bold uppercase bg-white/20 border border-white/20">
+                        {{ t }}
+                    </span>
+                </div>
+
+                <div class="space-y-4 text-left bg-black/20 p-5 rounded-2xl">
+                    <div v-for="stat in selectedPoke.stats" :key="stat.name">
+                        <div class="flex justify-between text-[10px] font-bold uppercase mb-1 opacity-70">
+                            <span>{{ stat.name }}</span>
+                            <span>{{ stat.value }}</span>
+                        </div>
+                        <div class="w-full bg-white/10 h-2 rounded-full overflow-hidden">
+                            <div class="bg-yellow-300 h-full rounded-full" :style="{ width: (stat.value / 1.8) + '%' }"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const { createApp, ref, computed, onMounted } = Vue
+createApp({
+    setup() {
+        const search = ref('')
+        const pokemonList = ref([])
+        const loading = ref(true)
+        const selectedPoke = ref(null)
+
+        onMounted(async () => {
+            const res = await fetch('https://pokeapi.co/api/v2/pokemon?limit=151');
+            const data = await res.json();
+            const details = await Promise.all(data.results.map(async p => {
+                const r = await fetch(p.url);
+                const d = await r.json();
+                return {
+                    id: d.id, name: d.name,
+                    image: d.sprites.other['official-artwork'].front_default,
+                    types: d.types.map(t => t.type.name),
+                    stats: d.stats.map(s => ({ name: s.stat.name.replace('special-','S.'), value: s.base_stat }))
+                }
+            }));
+            pokemonList.value = details;
+            loading.value = false;
+        });
+
+        const filteredPokemon = computed(() => pokemonList.value.filter(p => p.name.includes(search.value.toLowerCase())));
+        const selectPokemon = (p) => selectedPoke.value = p;
+        return { search, filteredPokemon, loading, selectedPoke, selectPokemon }
+    }
+}).mount('#app')
+</script>
+</body>
+</html>
